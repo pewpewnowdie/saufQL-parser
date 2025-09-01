@@ -15,13 +15,13 @@ jql_grammar = r"""
 
     value_list: VALUE ("," VALUE)*
 
-    LOGIC: "AND" | "OR"
+    LOGIC: /(?i:AND|OR)/
     FIELD: /[a-zA-Z_][a-zA-Z0-9_]*/
     OP: "=" | "!=" | ">" | "<" | ">=" | "<=" | "~" | "!~"
-    IN_OP: "IN" | "NOT IN"
-    NOT_OP: "NOT"
+    IN_OP: /(?i:IN|NOT IN)/
+    NOT_OP: /(?i:NOT)/
     VALUE: ESCAPED_STRING | /[A-Za-z0-9_.]+/
-    DIRECTION: "ASC" | "DESC"
+    DIRECTION: /(?i:ASC|DESC)/
 
     %import common.ESCAPED_STRING
     %import common.WS
@@ -34,12 +34,12 @@ parser = Lark(jql_grammar, parser="lalr")
 # ---------------- Transformer (AST) ----------------
 class ToAST(Transformer):
     def FIELD(self, tok: Token): return tok.value
-    def OP(self, tok: Token): return tok.value
-    def IN_OP(self, tok: Token): return tok.value
+    def OP(self, tok: Token): return tok.value.upper()
+    def IN_OP(self, tok: Token): return tok.value.upper()
     def VALUE(self, tok: Token): return tok.value.strip('"')
-    def DIRECTION(self, tok: Token): return tok.value
-    def LOGIC(self, tok: Token): return tok.value
-    def NOT_OP(self, tok: Token): return tok.value
+    def DIRECTION(self, tok: Token): return tok.value.upper()
+    def LOGIC(self, tok: Token): return tok.value.upper()
+    def NOT_OP(self, tok: Token): return tok.value.upper()
 
     def start(self, items):
         ast = {"where": items[0]}
@@ -50,7 +50,6 @@ class ToAST(Transformer):
     def expr(self, items):
         if len(items) == 1:
             return items[0]
-        # items = [cond1, "AND", cond2, "OR", cond3...]
         result = items[0]
         i = 1
         while i < len(items):
@@ -103,8 +102,8 @@ def build_filters(node):
             if op == "<=":  return Q(**{f"{field}__lte": node["value"]})
             if op == "~":   return Q(**{f"{field}__icontains": node["value"]})
             if op == "!~":  return ~Q(**{f"{field}__icontains": node["value"]})
-            if op == "IN":  return Q(**{f"{field}__in": node["values"]})
-            if op == "NOT IN": return ~Q(**{f"{field}__in": node["values"]})
+            if op == "IN" or op == "in":  return Q(**{f"{field}__in": node["values"]})
+            if op == "NOT IN" or op == "not in": return ~Q(**{f"{field}__in": node["values"]})
             raise ValueError(f"Unsupported operator {op}")
 
         elif "NOT" in node:
@@ -131,12 +130,13 @@ def parse_query(query):
 
 
 if __name__ == "__main__":
-    query = 'status NOT IN ("Open", "Closed", "InProgress") OR assignee = "kshitij.tyagi" ORDER BY priority DESC'
+    query = 'status not in ("Open", "Closed", "InProgress") and assignee = "kshitij.tyagi" ORDER BY priority DESC'
     ast = parse_query(query)
     print("AST:", ast)
 
-    filters = build_filters(ast['where'])
-    print("Filters:", filters)
+    if ast:
+        filters = build_filters(ast['where'])
+        print("Filters:", filters)
     # Example: assume you have a Django model `Issue`
     # qs = ast_to_django(ast, Issue)
     # print(qs.query)   # prints generated SQL
