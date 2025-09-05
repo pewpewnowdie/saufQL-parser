@@ -92,28 +92,22 @@ def ast_to_django(ast, model_cls):
 def build_filters(node):
     """Recursively build Q objects from AST."""
     if isinstance(node, dict):
-        if "field" in node:  # simple condition
-            field, op = node["field"], node["op"]
-            if op == "=":   return Q(**{field: node["value"]})
-            if op == "!=":  return ~Q(**{field: node["value"]})
-            if op == ">":   return Q(**{f"{field}__gt": node["value"]})
-            if op == "<":   return Q(**{f"{field}__lt": node["value"]})
-            if op == ">=":  return Q(**{f"{field}__gte": node["value"]})
-            if op == "<=":  return Q(**{f"{field}__lte": node["value"]})
-            if op == "~":   return Q(**{f"{field}__icontains": node["value"]})
-            if op == "!~":  return ~Q(**{f"{field}__icontains": node["value"]})
-            if op == "IN" or op == "in":  return Q(**{f"{field}__in": node["values"]})
-            if op == "NOT IN" or op == "not in": return ~Q(**{f"{field}__in": node["values"]})
-            raise ValueError(f"Unsupported operator {op}")
-
-        elif "NOT" in node:
-            return ~build_filters(node["NOT"])
-        elif "AND" in node:
-            left, right = node["AND"]
-            return build_filters(left) & build_filters(right)
-        elif "OR" in node:
-            left, right = node["OR"]
-            return build_filters(left) | build_filters(right)
+      if "field" in node:
+        field, op = node["field"], node["op"]
+        if field == "project":
+          if op == "=":  return Q(project__key=node['value']) | Q(project__name=node['value'])
+          if op == "!=":  return ~(Q(project__key=node['value']) | Q(project__name=node['value']))
+          if op == "IN" or op == "in":  return Q(project__key__in=node['value']) | Q(project__name__in=node['value'])
+          if op == "NOT IN" or op == "not in": return ~Q(Q(project__key__in=node['value']) | Q(project__name__in=node['value']))
+        raise ValueError(f"Unsupported operator {op}")
+    elif "NOT" in node:
+        return ~build_filters(node["NOT"])
+    elif "AND" in node:
+        left, right = node["AND"]
+        return build_filters(left) & build_filters(right)
+    elif "OR" in node:
+        left, right = node["OR"]
+        return build_filters(left) | build_filters(right)
 
     raise ValueError(f"Invalid AST node: {node}")
 
@@ -130,7 +124,8 @@ def parse_query(query):
 
 
 if __name__ == "__main__":
-    query = 'status not in ("Open", "Closed", "InProgress") and assignee = "kshitij.tyagi" ORDER BY priority DESC'
+    # query = 'status not in ("Open", "Closed", "InProgress") and assignee = "kshitij.tyagi" ORDER BY priority DESC'
+    query = "project = IUG"
     ast = parse_query(query)
     print("AST:", ast)
 
